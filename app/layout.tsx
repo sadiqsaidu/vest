@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { WalletProvider } from "./providers/WalletProvider";
+import { UmbraProvider } from "../lib/umbra/provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <WalletProvider>{children}</WalletProvider>
+        <WalletProvider>
+          <UmbraProvider>{children}</UmbraProvider>
+        </WalletProvider>
       </body>
     </html>
   );
