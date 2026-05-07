@@ -39,3 +39,35 @@ create index if not exists unlock_schedule_cap_table_idx
   on unlock_schedule(cap_table_id, unlock_timestamp);
 create index if not exists unlock_schedule_beneficiary_idx
   on unlock_schedule(beneficiary_wallet);
+
+-- Viewing keys ------------------------------------------------------------
+--
+-- Each row represents a scoped audit envelope. The actual viewing key bytes
+-- are stored encrypted-at-rest under a key derived from `access_token` via
+-- HKDF (the access_token never enters the DB). Vest enforces revocation and
+-- expiration application-side; the underlying Umbra hierarchical keys
+-- themselves cannot be revoked once shared.
+
+create table if not exists viewing_keys (
+  id uuid primary key default gen_random_uuid(),
+  cap_table_id uuid not null references cap_tables(id) on delete cascade,
+  founder_wallet text not null,             -- denormalised; matches cap_tables.founder_wallet
+  recipient_label text not null,            -- e.g. "Smith LLP — Tax Year 2025"
+  scope text not null check (scope in ('master', 'mint', 'yearly', 'monthly')),
+  scope_params jsonb not null default '{}'::jsonb, -- { mint?, year?, month? }
+  access_token_hash text not null,          -- sha256(access_token); index target
+  envelope jsonb,                           -- { v, iv, ct } AES-GCM payload, set on finalize
+  status text not null default 'pending'
+    check (status in ('pending', 'active')),
+  expires_at timestamptz,                   -- nullable = never (application-level)
+  revoked_at timestamptz,
+  last_accessed_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists viewing_keys_access_token_hash_idx
+  on viewing_keys(access_token_hash);
+create index if not exists viewing_keys_cap_table_idx
+  on viewing_keys(cap_table_id);
+create index if not exists viewing_keys_founder_idx
+  on viewing_keys(founder_wallet);

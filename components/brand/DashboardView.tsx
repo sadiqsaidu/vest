@@ -22,6 +22,8 @@ import {
 import { tokenByMint, tokenSymbolFromMint } from "@/lib/tokens";
 import { signAuth, authHeaders } from "@/lib/walletAuth";
 import { cn, formatAmount, formatRelative, truncateAddress } from "@/lib/utils";
+import { ViewingKeysList } from "./ViewingKeysList";
+import { GenerateViewingKeyModal } from "./GenerateViewingKeyModal";
 
 type ShieldStatus =
   | "pending"
@@ -76,7 +78,8 @@ type ActivityEvent = {
     | "utxo_created"
     | "utxo_claimed"
     | "viewing_key_issued"
-    | "viewing_key_revoked";
+    | "viewing_key_revoked"
+    | "viewing_key_accessed";
   at: string;
   signature?: string | null;
   data: Record<string, any>;
@@ -97,6 +100,7 @@ export function DashboardView({ id }: { id: string }) {
   } | null>(null);
   const [events, setEvents] = useState<ActivityEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [vkModalOpen, setVkModalOpen] = useState(false);
 
   useEffect(() => {
     if (!wallet.connected || !wallet.publicKey) return;
@@ -189,12 +193,10 @@ export function DashboardView({ id }: { id: string }) {
               <Button>Shield treasury</Button>
             </Link>
           )}
-          <Link href={`/dashboard/${ct.id}/viewing-keys`}>
-            <Button variant="ghost">
-              <KeyRound size={14} />
-              Generate viewing key
-            </Button>
-          </Link>
+          <Button variant="ghost" onClick={() => setVkModalOpen(true)}>
+            <KeyRound size={14} />
+            Generate viewing key
+          </Button>
         </div>
       </div>
 
@@ -269,8 +271,15 @@ export function DashboardView({ id }: { id: string }) {
       {/* SECTION 4 — ACTIVITY */}
       <Activity events={events} mint={ct.mint} decimals={decimals} symbol={symbol} />
 
-      {/* SECTION 5 — VIEWING KEYS (empty state for now) */}
-      <ViewingKeys capTableId={ct.id} />
+      {/* SECTION 5 — VIEWING KEYS */}
+      <ViewingKeysList capTableId={ct.id} capTableMint={ct.mint} />
+
+      <GenerateViewingKeyModal
+        capTableId={ct.id}
+        capTableMint={ct.mint}
+        open={vkModalOpen}
+        onClose={() => setVkModalOpen(false)}
+      />
     </div>
   );
 }
@@ -669,31 +678,12 @@ function renderActivity(
         Icon: KeyRound,
         text: `Viewing key revoked: ${e.data.recipient ?? "—"}`,
       };
+    case "viewing_key_accessed":
+      return {
+        Icon: KeyRound,
+        text: `Viewing key accessed: ${e.data.recipient ?? "—"}`,
+      };
   }
-}
-
-/* -----------------------------------------------------------------------
- * Viewing keys (empty state for now)
- * ---------------------------------------------------------------------*/
-
-function ViewingKeys({ capTableId }: { capTableId: string }) {
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm tracking-h2 text-text-muted">Viewing keys</h2>
-        <Link href={`/dashboard/${capTableId}/viewing-keys`}>
-          <Button size="sm" variant="ghost">
-            <KeyRound size={12} />
-            Generate
-          </Button>
-        </Link>
-      </div>
-      <EmptyState>
-        No viewing keys issued. Issue a key to share read access with auditors,
-        lawyers, or beneficiaries&rsquo; tax preparers.
-      </EmptyState>
-    </section>
-  );
 }
 
 /* -----------------------------------------------------------------------

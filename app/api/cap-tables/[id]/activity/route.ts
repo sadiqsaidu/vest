@@ -10,7 +10,8 @@ export type ActivityEvent = {
     | "utxo_created"
     | "utxo_claimed"
     | "viewing_key_issued"
-    | "viewing_key_revoked";
+    | "viewing_key_revoked"
+    | "viewing_key_accessed";
   at: string; // ISO
   signature?: string | null;
   // Per-kind payload, kept loose so the UI can render uniformly.
@@ -48,6 +49,13 @@ export async function GET(
 
   if (rowErr)
     return NextResponse.json({ error: rowErr.message }, { status: 500 });
+
+  const { data: vkRows } = await sb
+    .from("viewing_keys")
+    .select(
+      "id, recipient_label, scope, scope_params, status, created_at, revoked_at, last_accessed_at",
+    )
+    .eq("cap_table_id", ct.id);
 
   const events: ActivityEvent[] = [];
 
@@ -88,6 +96,46 @@ export async function GET(
           beneficiary_wallet: r.beneficiary_wallet,
           amount: r.amount,
           mint: ct.mint,
+        },
+      });
+    }
+  }
+
+  for (const vk of vkRows ?? []) {
+    if (vk.status !== "active") continue;
+    events.push({
+      kind: "viewing_key_issued",
+      at: vk.created_at,
+      data: {
+        viewing_key_id: vk.id,
+        recipient: vk.recipient_label,
+        scope: vk.scope,
+        scope_params: vk.scope_params,
+      },
+    });
+    if (vk.revoked_at) {
+      events.push({
+        kind: "viewing_key_revoked",
+        at: vk.revoked_at,
+        data: {
+          viewing_key_id: vk.id,
+          recipient: vk.recipient_label,
+          scope: vk.scope,
+        },
+      });
+    }
+    if (vk.last_accessed_at) {
+      // Bucket access events by day so a frequently-accessed key doesn't
+      // dominate the timeline. Aligns with the prompt's "bucketed by day".
+      const day = new Date(vk.last_accessed_at);
+      day.setUTCHours(0, 0, 0, 0);
+      events.push({
+        kind: "viewing_key_accessed",
+        at: day.toISOString(),
+        data: {
+          viewing_key_id: vk.id,
+          recipient: vk.recipient_label,
+          scope: vk.scope,
         },
       });
     }
