@@ -952,3 +952,209 @@ import type { U64, U32 } from "@umbra-privacy/sdk/types";
 5. **Fee rates are on-chain** — `ProtocolFeesConfiguration` account holds live rates. For
    production, fetch dynamically rather than hardcoding 35 bps.
 
+---
+
+## Claim flow APIs
+
+> Source pages (verified verbatim from the user-supplied umbra.txt extract):
+> - https://sdk.umbraprivacy.com/sdk/mixer/fetching-utxos
+> - https://sdk.umbraprivacy.com/sdk/mixer/claiming-utxos
+> - https://sdk.umbraprivacy.com/sdk/mixer/privacy-analysis
+>
+> Function signatures and result shapes additionally cross-checked against
+> `node_modules/@umbra-privacy/sdk/dist/*.d.ts` from the installed v4.0.0 SDK.
+
+### `getClaimableUtxoScannerFunction` — what it returns
+
+**Verified signature** (from `client-Cqv_5hHQ.d.ts`):
+
+```typescript
+type ClaimableUtxoScannerFunction = (
+  treeIndex: U32,
+  startInsertionIndex: U32,
+  endInsertionIndex?: U32,
+) => Promise<ScannedUtxoResult>;
+```
+
+> ⚠️ Three U32 args, not two. The earlier scaffold's `scan(0 as U32, 0 as U32)` is
+> equivalent to `(treeIndex=0, startInsertionIndex=0, endInsertionIndex=undefined)` —
+> "scan all of tree 0 from the start". Pagination uses `result.nextScanStartIndex`
+> as the next call's `startInsertionIndex`.
+
+**Return shape** — already-decrypted UTXOs grouped by source/unlocker type:
+
+```typescript
+interface ScannedUtxoResult {
+  selfBurnable:       ScannedUtxoData[]; // encrypted-balance source, you create+claim
+  received:           ScannedUtxoData[]; // encrypted-balance source, sent to you  ← Vest beneficiary
+  publicSelfBurnable: ScannedUtxoData[]; // public-balance source, you create+claim
+  publicReceived:     ScannedUtxoData[]; // public-balance source, sent to you
+  nextScanStartIndex: U32;               // resume cursor
+}
+
+type ScannedUtxoData = DecryptedUtxoData;
+```
+
+`ScannedUtxoData` is the **decrypted** UTXO with `amount: U64`, `destinationAddress`,
+`commitmentIndex`, `leafIndex`, sender address halves, mint address halves, timestamp,
+pool volume, etc. **No Merkle proofs** at scan time — the SDK fetches proofs internally
+when `claim()` is called. Pass entries directly to the claim factory.
+
+Decryption: SDK derives the user's X25519 private key from the master seed, then
+attempts to decrypt every ciphertext returned by the indexer. Successfully decrypted
+ciphertexts surface as scanned UTXOs; failures are silently filtered (those weren't
+addressed to this wallet).
+
+**Error stages** (`isFetchUtxosError`): `initialization | validation | key-derivation
+| indexer-fetch | proof-fetch`. Empty `received: []` is **not** an error.
+
+### Beneficiary registration — required for receiver claims
+
+The receiver-claim ZK circuit proves "knowledge of your user commitment", which is
+established only by `register({ confidential: true, anonymous: true })`. Specifically:
+
+| Field on `EncryptedUserAccount`   | Set by                          | Required for receiving | Required for claiming |
+|-----------------------------------|---------------------------------|:----------------------:|:---------------------:|
+| `isUserAccountX25519KeyRegistered`| `confidential: true`            | ✓ (sender encrypts to it) | ✓                  |
+| `isUserCommitmentRegistered`      | `anonymous: true`               |                        | ✓                     |
+| `isActiveForAnonymousUsage`       | both above                      |                        | ✓                     |
+
+> Beneficiaries **must register with `anonymous: true`** before they can claim, even
+> though sender-side enforcement at UTXO creation only checks the X25519 key. Auto-trigger
+> registration as the first step of the claim flow if the user isn't fully active for
+> anonymous usage; do not show a separate registration page.
+
+### Claim factories — only 3 in v4.0.0 (no receiver→public direct claim)
+
+```typescript
+// SDK exports — confirmed from index.d.ts:
+getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction  // ← receiver UTXO → ETA
+getSelfClaimableUtxoToEncryptedBalanceClaimerFunction       // self UTXO → ETA
+getSelfClaimableUtxoToPublicBalanceClaimerFunction          // self UTXO → ATA
+// NOTE: there is NO getReceiverClaimableUtxoToPublicBalanceClaimerFunction.
+```
+
+> ⚠️ For Vest beneficiaries (recipients of receiver-claimable UTXOs) who want tokens
+> in their public ATA, a **direct receiver→public claim is not supported by the SDK**.
+> The path is two-step:
+>
+> 1. `getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction` → claim into ETA
+> 2. `getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction` → withdraw ETA → ATA
+>
+> This is also the privacy-recommended path per Umbra's hybrid-model docs: aggregating
+> multiple UTXOs into the encrypted balance hides per-UTXO amounts before they exit.
+
+#### Claim signature + return value
+
+```typescript
+const zkProver = getClaimReceiverClaimableUtxoIntoEncryptedBalanceProver(); // from web-zk-prover
+const relayer = getUmbraRelayer({
+  apiEndpoint: "https://relayer.api-devnet.umbraprivacy.com",
+});
+
+const claim = getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction(
+  { client },
+  { zkProver, relayer },
+);
+
+const result: ClaimUtxoIntoEncryptedBalanceResult = await claim(utxos /*, optionalData? */);
+// utxos: readonly ScannedUtxoData[] — pass scan().received directly.
+```
+
+`ClaimUtxoIntoEncryptedBalanceResult.batches` is a `Map<U32, ClaimBatchResult>` — the
+SDK auto-batches up to **4 UTXOs per relayer batch**. Each `ClaimBatchResult` carries:
+
+```typescript
+{
+  requestId: string;
+  status: ClaimStatus;          // terminal — completed | failed | timed_out
+  txSignature?: string;         // present when completed
+  callbackSignature?: string;   // present when completed
+  utxoIds?: readonly string[];  // "treeIndex:leafIndex" — bridge to other scan results
+  failureReason?: string | null;
+}
+```
+
+Yes, batching IS supported via the array argument; the SDK splits batches of >4 into
+multiple relayer requests but a single `claim()` call covers them all.
+
+#### Withdraw signature (step 2 of the public-ATA path)
+
+```typescript
+const withdraw = getEncryptedBalanceToPublicBalanceDirectWithdrawerFunction({ client });
+const result: WithdrawResult = await withdraw(
+  destinationAddress,           // beneficiary's own wallet address
+  mint,
+  withdrawalAmount as U64,
+  // options? — { priorityFees, awaitCallback, ... } — same shape as deposit
+);
+```
+
+`WithdrawResult` is identical in shape to `DepositResult`: `queueSignature`,
+`callbackStatus` ("finalized" | "pruned" | "timed-out"), `callbackSignature?`. Same
+"pruned/timed-out" handling rules apply.
+
+### Claim error handling — `isClaimUtxoError`
+
+```typescript
+type ClaimUtxoStage =
+  | "initialization" | "validation" | "key-derivation"
+  | "zk-proof-generation"
+  | "pda-derivation" | "instruction-build" | "transaction-build"
+  | "transaction-compile" | "transaction-sign"
+  | "transaction-validate"   // ← stale Merkle proof — re-scan and retry
+  | "transaction-send";      // ← may have landed; verify on-chain before retry
+```
+
+Special cases:
+- `transaction-validate` typically means a stale Merkle proof. Re-call the scanner and
+  retry the claim.
+- `transaction-send` means the relayer accepted the tx but confirmation timed out. The
+  nullifier may already be burned; check on-chain before retrying.
+
+### Privacy implications for "claim to public" — UI warning copy
+
+From the Privacy Analysis page, **Encrypted Balance → Receiver-claimable → ATA** is
+Tier 2 (mixed). At burn time the chain reveals:
+
+- The claimed amount
+- The destination ATA (== beneficiary's wallet)
+
+Hidden:
+
+- The deposited amount (treasury shield is visible separately, but the per-UTXO carve-up
+  is not)
+- The depositor identity at burn time
+- Any direct on-chain link from the visible claim back to the original deposit
+
+UI copy: "Funds will arrive at your connected wallet ({addr}). Because this is a public
+withdrawal, the destination and amount are visible on-chain — but the link back to the
+original deposit is hidden."
+
+Tier 1 (encrypted → encrypted) hides amounts at both ends and is the "preferred" path
+per Umbra docs. v2 of Vest can offer "claim privately" (stop after step 1) as an option.
+
+### Proof generation timing (UX copy reference)
+
+From the Claiming UTXOs page: "Proof generation is CPU-intensive and may take **1–5
+seconds**. Consider showing a progress indicator while it runs." Plan UI accordingly:
+indeterminate progress for the proof phase, then per-batch completion ticks.
+
+### DB cross-reference — practical key for Vest
+
+The scanner returns `commitmentIndex` and `leafIndex` per UTXO; the relayer's
+`utxoIds` come back formatted as `"treeIndex:leafIndex"`. Neither is known at UTXO
+creation time (the sender doesn't see the inserted leaf index until the indexer picks
+it up), so we cannot persist this as the bridge.
+
+For Vest v1, match `unlock_schedule` rows ↔ scanner UTXOs by:
+
+1. Filter `unlock_schedule` to `beneficiary_wallet = me AND status = 'utxo_created'`.
+2. Sort by `unlock_timestamp ASC` (insertion order on our side).
+3. Sort `scan().received` by `commitmentIndex ASC` (insertion order on chain).
+4. Pair positionally; surplus scanner UTXOs render as "Direct payment" cards.
+
+This is fragile if multiple senders fund the same beneficiary in interleaved order, but
+fine for the demo. v2 should write `treeIndex:leafIndex` back to the row after the
+indexer surfaces it.
+
