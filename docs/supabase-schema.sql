@@ -31,6 +31,7 @@ create table if not exists unlock_schedule (
   utxo_commitment text,                 -- Poseidon commitment from creation result
   utxo_creation_tx text,                -- primary tx signature for the UTXO creation
   utxo_signature text,                  -- legacy alias; kept for compatibility
+  claim_tx_signature text,              -- on-chain sig of the claim/withdraw tx
   claimed_at timestamptz
 );
 
