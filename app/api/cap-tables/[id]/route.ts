@@ -29,7 +29,7 @@ export async function GET(
   const { data: ct, error } = await sb
     .from("cap_tables")
     .select(
-      "id, founder_wallet, project_name, mint, total, commitment, shield_status, test_mode, created_at",
+      "id, founder_wallet, project_name, mint, total, commitment, shield_status, shield_tx_signature, test_mode, created_at",
     )
     .eq("id", params.id)
     .single();
@@ -43,7 +43,7 @@ export async function GET(
   const { data: schedule } = await sb
     .from("unlock_schedule")
     .select(
-      "id, beneficiary_wallet, beneficiary_label, unlock_timestamp, amount, status",
+      "id, beneficiary_wallet, beneficiary_label, unlock_timestamp, amount, status, utxo_commitment, utxo_creation_tx",
     )
     .eq("cap_table_id", ct.id)
     .order("unlock_timestamp", { ascending: true });
