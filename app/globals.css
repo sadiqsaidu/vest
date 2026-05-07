@@ -1,0 +1,94 @@
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #FAFAF7;
+  --surface: #FFFFFF;
+  --surface-sunken: #F4F3EE;
+  --surface-glass: rgba(255, 255, 255, 0.65);
+  --border: #E8E6DF;
+  --border-strong: #D6D3CA;
+  --text: #1A1A1A;
+  --text-muted: #6B6B68;
+  --text-subtle: #94948F;
+  --accent: #1A1A1A;
+  --accent-fg: #FFFFFF;
+  --success: #2F7A4D;
+  --warning: #8B6914;
+  --danger: #9B2C2C;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.dark {
+  --bg: #0F0F0E;
+  --surface: #1A1A18;
+  --surface-sunken: #14140F;
+  --surface-glass: rgba(26, 26, 24, 0.6);
+  --border: #2A2A26;
+  --border-strong: #3A3A35;
+  --text: #F5F4EE;
+  --text-muted: #A3A29C;
+  --text-subtle: #6E6E68;
+  --accent: #F5F4EE;
+  --accent-fg: #0F0F0E;
+  --success: #5BA378;
+  --warning: #C8A24A;
+  --danger: #C76B6B;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1 { letter-spacing: -0.025em; }
+h2 { letter-spacing: -0.015em; }
+
+.font-mono {
+  font-family: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace;
+}
+
+.glass {
+  background: var(--surface-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.hero-vignette {
+  background: radial-gradient(
+    ellipse 800px 400px at 50% 0%,
+    rgba(0, 0, 0, 0.025) 0%,
+    transparent 70%
+  );
+}
+
+.dark .hero-vignette {
+  background: radial-gradient(
+    ellipse 800px 400px at 50% 0%,
+    rgba(255, 255, 255, 0.025) 0%,
+    transparent 70%
+  );
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
