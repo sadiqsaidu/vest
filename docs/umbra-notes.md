@@ -314,6 +314,14 @@ import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk";
 `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` (Solana's devnet USDC faucet mint).
 Confirm by attempting a deposit — account-not-found = no Umbra pool for that mint on devnet.
 
+### Vest v1 token UI exposure
+
+The cap-table create flow exposes only **USDC** and **SOL (wSOL)** in the segmented
+control. USDT and UMBRA are also Umbra-supported on mainnet (see table above) but are
+intentionally hidden from the v1 founder UI to keep the surface area small. To expose
+them later, add entries in `lib/tokens.ts` and update the segmented control in
+`components/brand/CreateVestFlow.tsx`.
+
 ---
 
 ## Pricing / Fees

@@ -1,15 +1,15 @@
 import { Nav } from "@/components/brand/Nav";
 import { Footer } from "@/components/brand/Footer";
 import { RequireWallet } from "@/components/brand/RequireWallet";
-import { CapTableList } from "@/components/brand/CapTableList";
+import { CreateVestFlow } from "@/components/brand/CreateVestFlow";
 
-export default function DashboardPage() {
+export default function NewVestPage() {
   return (
     <>
       <Nav />
       <main className="pt-20">
         <RequireWallet>
-          <CapTableList />
+          <CreateVestFlow />
         </RequireWallet>
       </main>
       <Footer />
