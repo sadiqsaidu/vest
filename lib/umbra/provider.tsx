@@ -1,25 +1,17 @@
 "use client";
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
+import { useUmbraClient as useUmbraClientHook, type UmbraClientState } from "./client";
 
-type UmbraContextValue = {
-  ready: boolean;
-};
-
-const UmbraContext = createContext<UmbraContextValue | null>(null);
+const Ctx = createContext<UmbraClientState | null>(null);
 
 export function UmbraProvider({ children }: { children: ReactNode }) {
-  const value = useMemo(() => ({ ready: false }), []);
-
-  return <UmbraContext.Provider value={value}>{children}</UmbraContext.Provider>;
+  const state = useUmbraClientHook();
+  return <Ctx.Provider value={state}>{children}</Ctx.Provider>;
 }
 
-export function useUmbra() {
-  const context = useContext(UmbraContext);
-
-  if (!context) {
-    throw new Error("useUmbra must be used within UmbraProvider");
-  }
-
-  return context;
+export function useUmbraClient(): UmbraClientState {
+  const v = useContext(Ctx);
+  if (!v) return { status: "idle" };
+  return v;
 }
