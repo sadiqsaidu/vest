@@ -1,20 +1,17 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { tokenByMint, tokenSymbolFromMint } from "@/lib/tokens";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const TOKEN_DECIMALS: Record<string, number> = {};
-
 export function getTokenDecimals(mint: string): number {
-  return TOKEN_DECIMALS[mint] ?? 6;
+  return tokenByMint(mint)?.decimals ?? 6;
 }
 
 export function getTokenSymbol(mint: string): string {
-  const usdc = process.env.NEXT_PUBLIC_USDC_MINT;
-  if (usdc && mint === usdc) return "USDC";
-  return mint.slice(0, 4);
+  return tokenByMint(mint)?.symbol ?? tokenSymbolFromMint(mint);
 }
 
 export function formatAmount(amount: bigint, decimals: number): string {

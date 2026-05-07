@@ -1,7 +1,7 @@
 import { Nav } from "@/components/brand/Nav";
 import { Footer } from "@/components/brand/Footer";
 import { RequireWallet } from "@/components/brand/RequireWallet";
-import { CapTableDetail } from "@/components/brand/CapTableDetail";
+import { DashboardView } from "@/components/brand/DashboardView";
 
 export default function CapTableDetailPage({
   params,
@@ -13,7 +13,7 @@ export default function CapTableDetailPage({
       <Nav />
       <main className="pt-20">
         <RequireWallet>
-          <CapTableDetail id={params.id} />
+          <DashboardView id={params.id} />
         </RequireWallet>
       </main>
       <Footer />
