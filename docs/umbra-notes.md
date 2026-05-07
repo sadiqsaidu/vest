@@ -1,10 +1,8 @@
 # Umbra SDK — Implementation Notes for Vest
 
 > **Source of truth:** Compiled directly from sdk.umbraprivacy.com on 2026-05-07.
-> The initial scaffold (prompt 1) generated a notes file from package metadata only
-> — the docs site was blocked in the sandbox. That file had wrong indexer URLs and
-> several open questions that are now resolved. **This file supersedes it entirely.**
-> Do not merge with the old version.
+> Covers all pages needed for prompts 1–4. Each section references which
+> pages were fetched. Do not merge with any earlier version of this file.
 
 ---
 
@@ -23,12 +21,15 @@ The SDK resolves the correct program address automatically from the `network` pa
 ### Indexer endpoints — CONFIRMED (devnet differs from mainnet)
 
 > ⚠️ The prompt-1 scaffold put `https://indexer.api.umbraprivacy.com` in `.env.local.example`.
-> This is the wrong URL. The correct endpoints are:
+> This is wrong — the correct per-network endpoints are:
 
 | Network | Indexer endpoint |
 |---------|-----------------|
 | Mainnet | `https://utxo-indexer.api.umbraprivacy.com` |
 | **Devnet** | `https://utxo-indexer.api-devnet.umbraprivacy.com` |
+
+> ⚠️ The indexer is NOT required to create UTXOs — only to discover and claim them.
+> Omitting `indexerApiEndpoint` is valid for deposit-only flows.
 
 ### Relayer endpoints — CONFIRMED
 
@@ -41,56 +42,42 @@ The SDK resolves the correct program address automatically from the `network` pa
 
 ## Client Construction — exact `getUmbraClient` signature
 
+> Source: sdk.umbraprivacy.com/sdk/creating-a-client
+
 ```typescript
 import { getUmbraClient } from "@umbra-privacy/sdk";
-
 const client = await getUmbraClient(args, deps?);
 // Returns: Promise<IUmbraClient>
 ```
-
-`getUmbraClient` is **async**.
 
 ### Required args
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `signer` | `IUmbraSigner` | Must implement `signTransaction`, `signTransactions`, `signMessage`, `address` |
+| `signer` | `IUmbraSigner` | `signTransaction`, `signTransactions`, `signMessage`, `address` |
 | `network` | `"mainnet" \| "devnet" \| "localnet"` | Determines program IDs + Arcium endpoints |
 | `rpcUrl` | `string` | HTTP JSON-RPC endpoint |
-| `rpcSubscriptionsUrl` | `string` | WebSocket endpoint (same host as rpcUrl) |
+| `rpcSubscriptionsUrl` | `string` | WebSocket endpoint |
 
 ### Optional args
 
 | Field | Default | Notes |
 |-------|---------|-------|
-| `indexerApiEndpoint` | — | **Required for any mixer/UTXO usage.** Optional for encrypted-balance-only. |
-| `deferMasterSeedSignature` | `false` | `false` = wallet prompted at construction; `true` = prompted on first operation |
-| `offsets` | all `0n` | U512 key-rotation offsets for 7 key types |
+| `indexerApiEndpoint` | — | Required for mixer UTXO discovery/claim. NOT needed for deposit only. |
+| `deferMasterSeedSignature` | `false` | `true` = wallet prompt deferred to first operation |
+| `offsets` | all `0n` | U512 key-rotation offsets |
 
-### Optional deps (second argument)
+### Optional deps
 
-| Dep | Notes |
-|-----|-------|
-| `accountInfoProvider` | Override RPC account fetcher |
-| `blockhashProvider` | Override blockhash fetcher |
-| `transactionForwarder` | Override tx broadcast (e.g. Jito) |
-| `epochInfoProvider` | Override epoch info (Token-2022 fees) |
-| `masterSeedStorage` | Override seed persistence (`load`, `store`, `generate`) |
+`accountInfoProvider`, `blockhashProvider`, `transactionForwarder`, `epochInfoProvider`, `masterSeedStorage`
 
-> No client-level `commitment` param. Each factory call accepts per-call
-> `accountInfoCommitment` and `epochInfoCommitment` (default: `"confirmed"`).
-
-### IUmbraClient fields (read-only after construction)
+### IUmbraClient fields
 
 ```typescript
 client.signer                       // IUmbraSigner
 client.network                      // "mainnet" | "devnet" | "localnet"
-client.networkConfig                // resolved program addresses + Arcium cluster config
-client.accountInfoProvider          // pre-built RPC account fetcher
-client.blockhashProvider            // pre-built blockhash fetcher
-client.transactionForwarder         // pre-built tx broadcaster
-client.epochInfoProvider            // pre-built epoch info (Token-2022)
-client.masterSeed.getMasterSeed()   // async — derives + caches the 64-byte master seed
+client.networkConfig                // resolved program addresses + Arcium config
+client.masterSeed.getMasterSeed()   // async — derives + caches 64-byte master seed
 ```
 
 ### Full devnet example
@@ -110,8 +97,9 @@ const client = await getUmbraClient({
 
 ## Wallet Adapter Integration
 
-The SDK does **not** accept `@solana/wallet-adapter-react` adapters directly.
-It uses the **Wallet Standard** interface.
+> Source: sdk.umbraprivacy.com/sdk/wallet-adapters
+
+The SDK does NOT accept `@solana/wallet-adapter-react` adapters directly. Requires Wallet Standard.
 
 ### IUmbraSigner interface
 
@@ -124,9 +112,7 @@ interface IUmbraSigner {
 }
 ```
 
-### Production: Wallet Standard browser wallet
-
-Install extra packages:
+### Production bridge (Wallet Standard)
 
 ```bash
 pnpm add @wallet-standard/app @wallet-standard/base @wallet-standard/features
@@ -135,7 +121,7 @@ pnpm add @wallet-standard/app @wallet-standard/base @wallet-standard/features
 ```typescript
 import { getWallets } from "@wallet-standard/app";
 import { StandardConnect } from "@wallet-standard/features";
-import { createSignerFromWalletAccount, getUmbraClient } from "@umbra-privacy/sdk";
+import { createSignerFromWalletAccount } from "@umbra-privacy/sdk";
 
 const { get } = getWallets();
 const solanaWallets = get().filter((w) => {
@@ -143,46 +129,34 @@ const solanaWallets = get().filter((w) => {
   return f.includes("solana:signTransaction") && f.includes("solana:signMessage");
 });
 
-const wallet = solanaWallets[0]; // Phantom, Solflare, Backpack — all auto-discovered
+const wallet = solanaWallets[0];
 const { accounts } = await wallet.features[StandardConnect].connect();
-const account = accounts[0];
-
-const signer = createSignerFromWalletAccount(wallet, account);
-const client = await getUmbraClient({ signer, network: "devnet", ... });
+const signer = createSignerFromWalletAccount(wallet, accounts[0]);
 ```
 
-### Testing: In-memory keypair
-
-```typescript
-import { createInMemorySigner } from "@umbra-privacy/sdk";
-const signer = await createInMemorySigner();
-```
-
-### Bridging `@solana/wallet-adapter-react` → Umbra signer (Vest's pattern)
+### Vest bridge pattern (`@solana/wallet-adapter-react` → Umbra signer)
 
 1. Use `useWallet()` to detect connection and get pubkey.
-2. Use `getWallets()` from `@wallet-standard/app` to get raw Wallet Standard objects.
-3. Match the `WalletAccount` whose `address` equals the connected pubkey.
+2. Use `getWallets()` from `@wallet-standard/app` to enumerate Wallet Standard wallets.
+3. Match by address: find the `WalletAccount` whose `address` equals the connected pubkey.
 4. Call `createSignerFromWalletAccount(wallet, account)`.
-5. Recreate the Umbra client whenever the wallet address changes.
-
-Both `"solana:signTransaction"` and `"solana:signMessage"` must be present on the wallet —
-an error is thrown immediately if either is missing. Phantom, Solflare, and Backpack all support both.
+5. Recreate the Umbra client when the wallet address changes.
 
 ---
 
 ## Registration Flow
 
-Registration creates the on-chain `EncryptedUserAccount` PDA. **Idempotent** — checks on-chain
-state first, skips completed steps. Each step that runs costs SOL.
+> Source: sdk.umbraprivacy.com/sdk/registration, sdk.umbraprivacy.com/sdk/account-state
 
-### The three steps
+Registration is **idempotent** — safe to call every session. Each completed step is skipped.
 
-| Step | On-chain action | Required when |
-|------|----------------|---------------|
-| 1 — Account init | Creates `EncryptedUserAccount` PDA | Always (first call) |
-| 2 — X25519 key | Stores X25519 pubkey → enables Shared mode (local balance decryption) | `confidential: true` |
-| 3 — User commitment | Stores Poseidon commitment via Groth16 ZK proof → enables mixer | `anonymous: true` |
+### Three steps
+
+| Step | Action | Trigger |
+|------|--------|---------|
+| 1 — Account init | Creates `EncryptedUserAccount` PDA | Always |
+| 2 — X25519 key | Stores X25519 pubkey → enables Shared mode | `confidential: true` |
+| 3 — User commitment | Poseidon commitment via Groth16 ZK proof → enables mixer | `anonymous: true` |
 
 ### Full call
 
@@ -191,75 +165,46 @@ import { getUserRegistrationFunction } from "@umbra-privacy/sdk";
 
 const register = getUserRegistrationFunction({ client });
 const signatures = await register({
-  confidential: true,
-  anonymous: true,
+  confidential: true,   // required for encrypted balance querying
+  anonymous: true,      // required for mixer — BOTH founders and beneficiaries
+  callbacks: {
+    userAccountInitialisation: {
+      pre: async () => setStatus("Creating account…"),
+      post: async (tx, sig) => setProgress(33),
+    },
+    registerX25519PublicKey: {
+      pre: async () => setStatus("Registering encryption key…"),
+      post: async (tx, sig) => setProgress(66),
+    },
+    registerUserForAnonymousUsage: {
+      pre: async () => setStatus("Enabling anonymous mode…"),
+      post: async (tx, sig) => setProgress(100),
+    },
+  },
 });
-// signatures.length: 0 (already registered) | 1–3 (steps run)
 ```
 
-### `anonymous: true` — why both sides need it for Vest
-
-- **Founders** need `anonymous: true` to create UTXOs for beneficiaries.
-- **Beneficiaries** need `anonymous: true` to claim UTXOs from the mixer.
-- Always register with both `confidential: true, anonymous: true`.
-
-### Check before registering
+### Check registration status
 
 ```typescript
-import { getUserAccountQuerierFunction, getUserRegistrationFunction } from "@umbra-privacy/sdk";
+import { getUserAccountQuerierFunction } from "@umbra-privacy/sdk";
 
 const query = getUserAccountQuerierFunction({ client });
-const result = await query(client.signer.address);
-
-const isFullyRegistered =
-  result.state === "exists" &&
-  result.data.isUserAccountX25519KeyRegistered &&
-  result.data.isUserCommitmentRegistered;
-
-if (!isFullyRegistered) {
-  const register = getUserRegistrationFunction({ client });
-  await register({ confidential: true, anonymous: true });
-}
-```
-
-### `getUserAccountQuerierFunction` — verified return shape
-
-```typescript
-const query = getUserAccountQuerierFunction({ client });
-const result = await query(walletAddress); // can query any address
+const result = await query(walletAddress);
 
 if (result.state === "non_existent") {
-  // Not registered
+  // Not registered at all
 } else {
   const { data } = result;
-  data.isInitialised                      // Step 1 complete
-  data.isUserAccountX25519KeyRegistered   // Step 2 complete (confidential)
-  data.isUserCommitmentRegistered         // Step 3 complete (anonymous/mixer)
-  data.isActiveForAnonymousUsage          // Steps 2 + 3 both complete and valid
+  data.isInitialised                      // Step 1
+  data.isUserAccountX25519KeyRegistered   // Step 2 (confidential)
+  data.isUserCommitmentRegistered         // Step 3 (anonymous)
+  data.isActiveForAnonymousUsage          // All three complete and valid
   data.x25519PublicKey                    // Uint8Array | undefined
   data.userCommitment                     // bigint | undefined
-  data.generationIndex                    // number
-  data.randomGenerationSeed               // Uint8Array
+  data.generationIndex                    // bigint
 }
 ```
-
-### Registration options (full)
-
-```typescript
-await register({
-  confidential?: boolean,              // default true
-  anonymous?: boolean,                 // default true
-  accountInfoCommitment?: Commitment,  // default "confirmed"
-  epochInfoCommitment?: Commitment,    // default "confirmed"
-  callbacks?: {
-    userAccountInitialisation?: { pre, post },
-    registerX25519PublicKey?: { pre, post },
-    registerUserForAnonymousUsage?: { pre, post },
-  }
-});
-```
-
-Use `callbacks` to drive progress UI — step 3 (ZK proof) takes 2–8s in browser.
 
 ### Error handling
 
@@ -285,21 +230,19 @@ try {
 
 ## Master Seed Derivation
 
-The SDK signs a deterministic consent message (`UMBRA_MESSAGE_TO_SIGN`), hashes the signature
-with KMAC256 (dkLen=64) to produce a 64-byte master seed.
-
 ```typescript
 import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk";
 ```
 
-- Fires once per client lifetime, then cached in memory.
-- Default: in-memory only — lost on page reload (user signs again).
-- Override with `deps.masterSeedStorage` to persist. `sessionStorage` is acceptable for
-  hackathon; never use `localStorage` in plaintext for production.
+- Fires once per client lifetime, cached in memory.
+- In-memory default: lost on page reload (user signs again).
+- Override with `deps.masterSeedStorage` for persistence.
 
 ---
 
 ## Supported Tokens
+
+> Source: sdk.umbraprivacy.com/supported-tokens
 
 **Mainnet** (all SPL):
 
@@ -310,94 +253,556 @@ import { UMBRA_MESSAGE_TO_SIGN } from "@umbra-privacy/sdk";
 | wSOL  | `So11111111111111111111111111111111111111112` | ✓ | ✓ |
 | UMBRA | `PRVT6TB7uss3FrUd2D9xs2zqDBsa3GbMJMwCQsgmeta` | ✓ | ✓ |
 
-**Devnet USDC** — The docs don't list devnet mints explicitly. Working assumption:
-`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` (Solana's devnet USDC faucet mint).
-Confirm by attempting a deposit — account-not-found = no Umbra pool for that mint on devnet.
-
-### Vest v1 token UI exposure
-
-The cap-table create flow exposes only **USDC** and **SOL (wSOL)** in the segmented
-control. USDT and UMBRA are also Umbra-supported on mainnet (see table above) but are
-intentionally hidden from the v1 founder UI to keep the surface area small. To expose
-them later, add entries in `lib/tokens.ts` and update the segmented control in
-`components/brand/CreateVestFlow.tsx`.
+**Devnet USDC** — working assumption: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`.
+Confirm by attempting a deposit — `account-fetch` error = no pool for that mint on devnet.
 
 ---
 
 ## Pricing / Fees
 
-### 1. Protocol fee (SPL token)
+> Source: sdk.umbraprivacy.com/pricing, sdk.umbraprivacy.com/sdk/deposit
 
-```typescript
-import { BPS_DIVISOR } from "@umbra-privacy/sdk";
-// BPS_DIVISOR = 16_384n  (2^14 — NOT 10_000)
+### Self-deposit fee (public ATA → own encrypted balance)
 
-// Current rate: 35 bps ≈ 0.2136%
-const protocol_fee = (amount * 35n) / BPS_DIVISOR;
+**Zero protocol fees** for direct self-deposits. The deposit page explicitly states:
+> "In most cases, direct deposits from your own ATA to your own encrypted balance carry zero
+> protocol fees — the `baseFee` and `commissionBps` are both set to 0."
+
+This is the primary operation for Vest's treasury shielding (Phase A). No protocol fee deducted.
+
+### General fee formula (for non-zero fee pools)
+
+```
+credited = transferAmount - baseFee - floor((transferAmount - baseFee) * commissionBps / 10_000)
 ```
 
-Self-deposit (public ATA → own encrypted balance) = **0 protocol fee**.
-Fee applies to: withdrawals, cross-account transfers, UTXO creation, UTXO claims.
+Note: The deposit page uses `commissionBps / 10_000`. The SDK also exports `BPS_DIVISOR = 16_384n`
+(used for pool-level fee config, not the deposit fee formula). Do NOT conflate these — the deposit
+formula divides by 10,000. Use the SDK's built-in fee calculation rather than hardcoding either.
 
-### 2. Relayer fee (at claim time)
+### UTXO creation fees
+
+Protocol fees ARE deducted from `amount` before the commitment is created. The net amount is what
+the recipient receives when they claim.
+
+### Mixer SOL fee (at UTXO creation — one-time, non-refundable)
+
+Dynamically calculated from current Solana rent. Covers treap node rent + claim compute costs.
+
+### Relayer fee (at claim time)
 
 Currently **0**.
 
-### 3. Mixer SOL fee (at UTXO creation — one-time, non-refundable)
-
-Covers treap node rent + claim compute costs. Dynamically calculated from current rent schedule.
-
-| Operation | Protocol fee | Relayer fee | SOL fee |
-|-----------|:-----------:|:-----------:|:-------:|
-| Deposit (self, public → encrypted) | ✗ | ✗ | ✗ |
-| Withdrawal (encrypted → public) | ✓ | ✗ | ✗ |
-| UTXO creation | ✓ | ✗ | ✓ |
-| UTXO claim | ✓ | ✓ (0 now) | ✗ |
+| Operation | Protocol fee | SOL fee |
+|-----------|:-----------:|:-------:|
+| Deposit (self, ATA → own encrypted balance) | ✗ | ✗ |
+| UTXO creation | ✓ | ✓ |
+| UTXO claim | ✓ | ✗ |
 
 ---
 
-## SDK Pattern — Factory Functions
+## Funding Flow APIs
 
-```typescript
-// Step 1: build the function (cheap, once at setup)
-const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
-
-// Step 2: call at runtime (async, sends txs)
-const result = await deposit(destinationAddress, mint, amount);
-```
-
-### Naming: `get[Source]To[Target][Verb]Function`
-
-| Prefix/Suffix | Meaning |
-|---------------|---------|
-| `PublicBalance` | From/to public ATA |
-| `EncryptedBalance` | From/to ETA |
-| `ReceiverClaimableUtxo` | UTXO claimable by specified recipient |
-| `SelfClaimableUtxo` | UTXO claimable only by creator |
-| `Scanner` | Queries indexer for UTXOs |
-| `Querier` | Reads on-chain state |
-
-ZK provers are **never defaulted** — always supply in `deps`.
+> Source: sdk.umbraprivacy.com/sdk/deposit, /sdk/query, /sdk/conversion,
+> /sdk/mixer/overview, /sdk/mixer/creating-utxos, /sdk/understanding-the-sdk/callbacks
 
 ---
 
-## Key SDK Calls for Vest
+### Phase A — Deposit (shield treasury into encrypted balance)
 
-### Shield treasury (founder deposits into encrypted balance)
+**Function:** `getPublicBalanceToEncryptedBalanceDirectDepositorFunction`
 
 ```typescript
 import { getPublicBalanceToEncryptedBalanceDirectDepositorFunction } from "@umbra-privacy/sdk";
 
 const deposit = getPublicBalanceToEncryptedBalanceDirectDepositorFunction({ client });
+
 const result = await deposit(
-  client.signer.address,
-  USDC_MINT as Address,
-  1_000_000n as U64,
+  destinationAddress,   // Address — whose encrypted balance to credit (usually self)
+  mint,                 // Address — SPL or Token-2022 mint
+  transferAmount,       // bigint — gross amount in native units (U64)
+  options?,             // optional
 );
-// result.queueSignature / result.callbackSignature — both confirmed before return
 ```
 
-### Create receiver-claimable UTXO (founder → beneficiary unlock)
+#### Options
+
+| Option | Default | Notes |
+|--------|---------|-------|
+| `priorityFees` | `0n` | Microlamports — increase during network congestion |
+| `purpose` | `0` | Reserved — leave at 0 |
+| `optionalData` | zeros | 32-byte arbitrary metadata |
+| `awaitCallback` | `true` | Wait for Arcium MPC callback before resolving |
+| `skipPreflight` | `false` | Skip simulation — useful when preflight nodes are behind |
+| `maxRetries` | — | RPC retry count |
+| `accountInfoCommitment` | `"confirmed"` | Per-call commitment override |
+| `epochInfoCommitment` | `"confirmed"` | Per-call epoch info commitment |
+| `callbacks` | — | `{ pre, post }` — see Transaction Callbacks section |
+
+#### Return value: `DepositResult`
+
+```typescript
+type DepositResult = {
+  queueSignature: TransactionSignature;        // handler tx — always present
+  callbackStatus?: "finalized" | "pruned" | "timed-out"; // present when awaitCallback: true
+  callbackSignature?: TransactionSignature;    // present when callbackStatus === "finalized"
+  callbackElapsedMs?: number;                 // present when awaitCallback: true
+  rentClaimSignature?: TransactionSignature;  // rent reclaim tx (may be absent)
+  rentClaimError?: Error;                     // if rent reclaim failed (deposit still OK)
+};
+```
+
+> ⚠️ **`callbackStatus` can be `"pruned"` or `"timed-out"`** — not just `"finalized"`.
+> Handle all three cases in the UI. `"pruned"` or `"timed-out"` means the MPC computation
+> did not complete; the deposit handler fired but the balance may not yet be updated.
+
+#### IMPORTANT: Deposit transactions are publicly visible
+
+> The deposit page states explicitly: "Deposit transactions are publicly visible on-chain.
+> The depositor's wallet address, the destination address, and the gross transfer amount are
+> all readable from the transaction. Only the resulting encrypted balance is hidden — the act
+> of shielding itself is not private."
+
+This matters for Vest's user-facing copy: the treasury shield tx will be visible on Solscan
+with the amount. Only subsequent UTXO creation hides who gets what and how much.
+
+#### Deposit with callbacks
+
+```typescript
+const result = await deposit(destinationAddress, mint, amount, {
+  callbacks: {
+    pre: async (tx) => setStatus("Sending to private balance…"),
+    post: async (tx, sig) => setStatus("Shield confirmed."),
+  },
+});
+```
+
+#### Error handling
+
+```typescript
+import { isEncryptedDepositError } from "@umbra-privacy/sdk/errors";
+
+try {
+  await deposit(destinationAddress, mint, amount);
+} catch (err) {
+  if (isEncryptedDepositError(err)) {
+    switch (err.stage) {
+      case "validation":        // Invalid args
+      case "mint-fetch":        // Bad RPC / wrong mint address
+      case "fee-calculation":   // Token-2022 fee calc failed
+      case "account-fetch":     // Destination account not found / RPC error
+      case "transaction-send":  // Submitted but confirmation failed — may have landed
+      // other: pda-derivation, instruction-build, transaction-build,
+      //        transaction-compile, transaction-sign, transaction-validate
+    }
+  }
+}
+```
+
+---
+
+### Query encrypted balance (Stage 2 verification)
+
+**Function:** `getEncryptedBalanceQuerierFunction`
+
+```typescript
+import { getEncryptedBalanceQuerierFunction } from "@umbra-privacy/sdk";
+
+const query = getEncryptedBalanceQuerierFunction({ client });
+const balances = await query([USDC_MINT], options?);
+// Returns: Map<Address, QueryEncryptedBalanceResult>
+
+const result = balances.get(USDC_MINT);
+switch (result?.state) {
+  case "shared":        // result.balance: MathU64 — decrypted locally via X25519
+  case "mxe":          // encrypted, cannot decrypt client-side
+  case "uninitialized": // account PDA exists but balance not initialized
+  case "non_existent": // no ETA for this mint
+}
+```
+
+> If the balance is `"mxe"` after a deposit, it means X25519 key wasn't registered before
+> the deposit. Call `getNetworkEncryptionToSharedEncryptionConverterFunction` to upgrade.
+> For Vest (where we register first, then deposit), this should not happen.
+
+#### Error handling
+
+```typescript
+import { isQueryError } from "@umbra-privacy/sdk/errors";
+// err.stage: "pda-derivation" | "account-fetch" | "account-decode" |
+//            "key-derivation" | "decryption" | "initialization"
+```
+
+Query functions do NOT throw on non-existent accounts — they return `{ state: "non_existent" }`.
+Errors only indicate infrastructure failures.
+
+---
+
+### Conversion (MXE → Shared mode — defensive only)
+
+**Function:** `getNetworkEncryptionToSharedEncryptionConverterFunction`
+
+Only needed if a deposit was made BEFORE X25519 registration. For Vest (register first → deposit),
+this should not occur, but add as a defensive check in the Stage 2 verification step.
+
+```typescript
+import { getNetworkEncryptionToSharedEncryptionConverterFunction } from "@umbra-privacy/sdk";
+
+const convert = getNetworkEncryptionToSharedEncryptionConverterFunction({ client });
+const result = await convert([USDC_MINT]);
+// result.converted: Map<Address, TransactionSignature>
+// result.skipped:   Map<Address, "non_existent" | "not_initialised" | "already_shared" | "balance_not_initialised">
+```
+
+Conversion is idempotent — `already_shared` mints are silently skipped.
+
+---
+
+### Phase B — Create receiver-claimable UTXOs
+
+> ⚠️ **No batching.** Each UTXO is one separate transaction. Loop sequentially.
+
+#### Choosing the source
+
+For Vest: treasury has been shielded into encrypted balance (Phase A). Use the
+**encrypted balance** source for stronger privacy (hides the treasury → UTXO link):
+
+```
+getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction
+```
+
+If Phase A was skipped / failed and you want to fund from public ATA instead:
+
+```
+getPublicBalanceToReceiverClaimableUtxoCreatorFunction
+```
+
+#### Correct ZK prover names (verified from docs)
+
+> ⚠️ The prover names follow the same naming convention as the factory functions.
+> Earlier notes had incorrect names. Verified names:
+
+```typescript
+import {
+  getEncryptedBalanceToReceiverClaimableUtxoCreatorProver, // for encrypted source
+  getPublicBalanceToReceiverClaimableUtxoCreatorProver,    // for public source
+  getEncryptedBalanceToSelfClaimableUtxoCreatorProver,
+  getPublicBalanceToSelfClaimableUtxoCreatorProver,
+} from "@umbra-privacy/web-zk-prover";
+```
+
+#### Full UTXO creation call (encrypted balance source — Vest primary path)
+
+```typescript
+import { getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
+import { getEncryptedBalanceToReceiverClaimableUtxoCreatorProver } from "@umbra-privacy/web-zk-prover";
+
+const zkProver = getEncryptedBalanceToReceiverClaimableUtxoCreatorProver();
+
+const createUtxo = getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction(
+  { client },
+  { zkProver },
+);
+
+const result = await createUtxo({
+  destinationAddress: beneficiaryWalletAddress as Address,  // recipient (the unlocker)
+  mint: USDC_MINT as Address,
+  amount: 500_000n as U64,                                  // base units, fees deducted before commitment
+});
+```
+
+#### Return type differs by source
+
+| Source | Return type | MPC callback? |
+|--------|------------|:-------------:|
+| Encrypted balance | `CreateUtxoFromEncryptedBalanceResult` | ✓ (dual instruction) |
+| Public balance | `CreateUtxoFromPublicBalanceResult` | ✗ (single tx) |
+
+From-encrypted-balance is a dual-instruction operation (handler + Arcium MPC callback).
+It takes longer. From-public-balance is a single tx and confirms faster.
+
+#### Verify recipient registration BEFORE creating each UTXO
+
+The recipient's X25519 key must be on-chain — the SDK uses it to encrypt the ciphertext.
+Creating a UTXO for an unregistered recipient will fail at `account-fetch` stage.
+
+```typescript
+const recipientQuery = getUserAccountQuerierFunction({ client });
+const recipientResult = await recipientQuery(beneficiaryWalletAddress);
+
+if (
+  recipientResult.state === "non_existent" ||
+  !recipientResult.data.isUserAccountX25519KeyRegistered
+) {
+  // Surface error: "Beneficiary {label} has not registered with Umbra yet.
+  // Ask them to connect their wallet at vest.app/claim."
+  throw new Error(`Beneficiary not registered: ${beneficiaryWalletAddress}`);
+}
+```
+
+#### UTXO creation with callbacks
+
+```typescript
+const result = await createUtxo(
+  {
+    destinationAddress: beneficiaryWalletAddress,
+    mint,
+    amount,
+  },
+  {           // <-- 2nd arg: options with callbacks
+    callbacks: {  // Check TypeScript types — callback shape may differ by factory
+      pre: async (tx) => updateProgress(i, "submitting"),
+      post: async (tx, sig) => updateProgress(i, "confirmed"),
+    },
+  },
+);
+```
+
+> ⚠️ **Callback shape discrepancy in docs**: The callbacks reference page shows UTXO creation
+> using positional args `createUtxo(recipient, mint, amount, { createUtxo: {...} })`, but
+> the Creating UTXOs page shows an object arg `createUtxo({ destinationAddress, mint, amount })`.
+> Verify against TypeScript types at `node_modules/@umbra-privacy/sdk/dist/*.d.ts`. Use the
+> object form as primary — it matches the dedicated API page.
+
+#### Error handling for UTXO creation
+
+```typescript
+import { isCreateUtxoError } from "@umbra-privacy/sdk/errors";
+
+try {
+  const result = await createUtxo({ destinationAddress, mint, amount });
+} catch (err) {
+  if (isCreateUtxoError(err)) {
+    switch (err.stage) {
+      case "zk-proof-generation":
+        // Most common failure. OOM in browser, or prover/circuit mismatch.
+        // User-facing: "Failed to generate proof. Please try again."
+        break;
+      case "transaction-sign":
+        // User rejected tx in wallet.
+        break;
+      case "account-fetch":
+        // Recipient's on-chain account not found — likely not registered.
+        // Or RPC connectivity issue.
+        break;
+      case "transaction-send":
+        // ⚠️ DO NOT immediately retry. The tx may have landed.
+        // First: scan recipient's UTXOs to check if the commitment was inserted.
+        // Only retry if scan confirms no new UTXO.
+        break;
+      // other: initialization, validation, mint-fetch, fee-calculation,
+      //        key-derivation, pda-derivation, instruction-build,
+      //        transaction-build, transaction-compile, transaction-validate
+    }
+  }
+}
+```
+
+> **Critical resilience note for Vest**: After `transaction-send` error, do NOT mark the
+> schedule row as failed and immediately retry. First query the beneficiary's UTXO list to
+> confirm whether the commitment was inserted. If yes, mark `utxo_created`. If no, retry.
+
+---
+
+## Transaction Callbacks
+
+> Source: sdk.umbraprivacy.com/sdk/understanding-the-sdk/callbacks
+
+```typescript
+import type {
+  TransactionCallbacks,
+  PreTransactionCallback,
+  PostTransactionCallback,
+} from "@umbra-privacy/sdk/interfaces";
+
+// Called with signed tx immediately before send
+type PreTransactionCallback = (transaction: SignedTransaction) => Promise<void>;
+
+// Called with signed tx and confirmed signature after landing
+type PostTransactionCallback = (
+  transaction: SignedTransaction,
+  signature: TransactionSignature,
+) => Promise<void>;
+```
+
+**Skipped steps do not invoke callbacks.** (e.g., already-registered steps during registration)
+
+### Per-operation callback shapes
+
+#### Deposit
+
+```typescript
+await deposit(destinationAddress, mint, amount, {
+  callbacks: {
+    pre: async (tx) => setStatus("Shielding…"),
+    post: async (tx, sig) => setStatus("Shielded."),
+  },
+});
+```
+
+#### Registration
+
+```typescript
+await register({
+  confidential: true,
+  anonymous: true,
+  callbacks: {
+    userAccountInitialisation: { pre, post },
+    registerX25519PublicKey: { pre, post },
+    registerUserForAnonymousUsage: { pre, post },
+  },
+});
+```
+
+#### UTXO creation (verify exact shape against TypeScript types)
+
+The callbacks page shows three slots: `createUtxo`, `createProofAccount`, `closeProofAccount`.
+`closeProofAccount` only fires if a stale proof account was found and cleaned up.
+
+---
+
+## Mixer Architecture
+
+> Source: sdk.umbraprivacy.com/sdk/mixer/overview
+
+### 4 UTXO creation factory functions
+
+| Function | Source | Unlocker (who claims) |
+|----------|--------|----------------------|
+| `getEncryptedBalanceToSelfClaimableUtxoCreatorFunction` | encrypted balance | creator |
+| `getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction` | encrypted balance | recipient |
+| `getPublicBalanceToSelfClaimableUtxoCreatorFunction` | public ATA | creator |
+| `getPublicBalanceToReceiverClaimableUtxoCreatorFunction` | public ATA | recipient |
+
+**For Vest:** use `getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction` — treasury was
+already shielded (Phase A), and the beneficiary is the unlocker (not the founder).
+
+### 3 roles per UTXO
+
+- **Sender** — funded the UTXO, fixed the recipient at creation time
+- **Unlocker** — burns the nullifier and releases tokens (chooses exit: public or encrypted)
+- **Recipient** — final destination (set by sender, cannot be changed)
+
+For receiver-claimable UTXOs, unlocker = recipient. The sender's involvement ends at creation.
+
+### Indexer requirement
+
+Indexer is only required for UTXO **discovery and claiming**. NOT for creating UTXOs.
+`getClaimableUtxoScannerFunction` fails without `indexerApiEndpoint` in the client.
+
+---
+
+## Vest-Specific Call Sequences
+
+### Founder flow (Prompt 4)
+
+```
+1. getUmbraClient({ network: "devnet", indexerApiEndpoint: devnet-indexer, deferMasterSeedSignature: true })
+2. getUserAccountQuerierFunction → check full registration
+3. getUserRegistrationFunction → register({ confidential: true, anonymous: true }) if needed
+4. getPublicBalanceToEncryptedBalanceDirectDepositorFunction → shield treasury (Phase A)
+   — capture result.queueSignature + result.callbackSignature
+   — handle callbackStatus: "pruned" | "timed-out" as non-fatal, show warning
+5. getEncryptedBalanceQuerierFunction → verify balance >= committed (Stage 2)
+   — if state === "mxe", call getNetworkEncryptionToSharedEncryptionConverterFunction
+6. getUserAccountQuerierFunction(beneficiaryWallet) → verify each recipient registered
+   — surface error if not registered (don't skip silently)
+7. Loop: getEncryptedBalanceToReceiverClaimableUtxoCreatorFunction (+ zkProver) per unlock row
+   — persist after each success (PATCH /api/schedule/[id])
+   — on transaction-send error: scan UTXOs before deciding to retry
+   — on ZK proof error: surface retry UI
+8. POST /api/cap-tables/[id]/activate → set shield_status='utxos_created'
+```
+
+### Beneficiary flow (Prompt 5)
+
+```
+1. getUmbraClient({ network: "devnet", indexerApiEndpoint: devnet-indexer, deferMasterSeedSignature: true })
+2. getUserRegistrationFunction → register({ confidential: true, anonymous: true })
+3. getClaimableUtxoScannerFunction → scan(0 as U32, 0 as U32)
+4. Filter: only show UTXOs where unlock_timestamp <= now
+5. getReceiverClaimableUtxoToEncryptedBalanceClaimerFunction (+ zkProver + devnet relayer) → claim
+```
+
+---
+
+## Installation Summary
+
+```bash
+pnpm add @umbra-privacy/sdk
+pnpm add @umbra-privacy/web-zk-prover
+pnpm add @wallet-standard/app @wallet-standard/base @wallet-standard/features
+```
+
+**Do NOT install:** `tweetnacl`, `ed2curve`, or any custom crypto library.
+
+### WASM note for Next.js App Router
+
+`@umbra-privacy/web-zk-prover` loads WASM. If WASM fails to load:
+
+```js
+// next.config.js
+const nextConfig = {
+  webpack: (config) => {
+    config.experiments = { ...config.experiments, asyncWebAssembly: true };
+    return config;
+  },
+};
+```
+
+### Sub-path imports
+
+| Import | Contents |
+|--------|----------|
+| `@umbra-privacy/sdk` | Everything |
+| `@umbra-privacy/sdk/types` | Branded types (U64, U32, etc.) |
+| `@umbra-privacy/sdk/interfaces` | Function type signatures for React context |
+| `@umbra-privacy/sdk/constants` | `BPS_DIVISOR`, seeds, etc. |
+| `@umbra-privacy/sdk/errors` | `isRegistrationError`, `isEncryptedDepositError`, `isCreateUtxoError`, `isQueryError`, `isConversionError` |
+
+---
+
+## Branded Types
+
+```typescript
+import type { U64, U32 } from "@umbra-privacy/sdk/types";
+import type { Address } from "@solana/kit";
+
+const amount = 1_000_000n as U64;   // 1 USDC (6 decimals) — always base units
+const treeIndex = 0 as U32;
+const mint = "EPjFWdd5..." as Address;
+```
+
+---
+
+## Open Questions (remaining)
+
+1. **Devnet USDC mint** — Working assumption: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`.
+   Confirm by attempting a deposit — `account-fetch` error = no Umbra pool for that mint on devnet.
+
+2. **ZK prover WASM in Next.js App Router** — May need `asyncWebAssembly: true`. Test when wiring
+   UTXO creation in prompt 4. ZK proof generation (1–5s) should run in a Web Worker to avoid
+   blocking the main thread — consider this for UX.
+
+3. **UTXO creation callback shape** — The callbacks reference page shows positional args; the
+   Creating UTXOs page shows an object arg. Verify against TypeScript declarations before
+   implementing progress hooks.
+
+4. **`callbackStatus: "pruned" | "timed-out"` handling** — Decide policy: treat as soft failure
+   (show warning, allow continue) or hard failure (halt, require retry). Recommended: soft
+   failure for treasury shield (Phase A), since balance may still be valid on next query.
+
+5. **Beneficiary registration enforcement** — Vest has no on-chain mechanism to require
+   registration before a UTXO is created. The UI must check registration client-side and
+   surface a message ("ask your beneficiary to register at vest.app/claim") before dispatching.
+
+6. **Devnet anonymity set** — Low traffic = weaker privacy. Acceptable for hackathon demo.
+
+7. **Master seed persistence** — In-memory default acceptable for hackathon. Override
+   `masterSeedStorage` with sessionStorage-backed implementation for better UX.
+
+8. **Fee rates are on-chain** — `ProtocolFeesConfiguration` holds live rates. For production,
+   fetch dynamically rather than hardcoding.
 
 ```typescript
 import { getPublicBalanceToReceiverClaimableUtxoCreatorFunction } from "@umbra-privacy/sdk";
