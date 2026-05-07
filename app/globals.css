@@ -92,3 +92,20 @@ input:focus-visible,
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* Loading affordance — the only place a gradient is acceptable. */
+.vest-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 0%,
+    var(--border) 50%,
+    var(--surface-sunken) 100%
+  );
+  background-size: 200% 100%;
+  animation: vest-skeleton-shimmer 1.6s linear infinite;
+}
+
+@keyframes vest-skeleton-shimmer {
+  0%   { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}

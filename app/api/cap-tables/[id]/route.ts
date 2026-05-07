@@ -43,7 +43,7 @@ export async function GET(
   const { data: schedule } = await sb
     .from("unlock_schedule")
     .select(
-      "id, beneficiary_wallet, beneficiary_label, unlock_timestamp, amount, status, utxo_commitment, utxo_creation_tx",
+      "id, beneficiary_wallet, beneficiary_label, unlock_timestamp, amount, status, utxo_commitment, utxo_creation_tx, claim_tx_signature, claimed_at",
     )
     .eq("cap_table_id", ct.id)
     .order("unlock_timestamp", { ascending: true });
