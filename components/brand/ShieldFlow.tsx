@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/primitives/Skeleton";
 import { useUmbraClient } from "@/lib/umbra/provider";
 import { signAuth, authHeaders } from "@/lib/walletAuth";
 import { tokenByMint, tokenSymbolFromMint } from "@/lib/tokens";
@@ -504,8 +505,14 @@ export function ShieldFlow({ id }: { id: string }) {
   }
   if (!data || !totals || !tokenInfo) {
     return (
-      <div className="mx-auto max-w-container px-6 py-10 text-sm text-text-subtle">
-        Loading…
+      <div className="mx-auto max-w-container space-y-4 px-6 py-10">
+        <Skeleton className="h-8 w-72" />
+        <Skeleton className="h-4 w-40" />
+        <div className="space-y-3 pt-4">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
       </div>
     );
   }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/primitives/Skeleton";
 import { useUmbraClient } from "@/lib/umbra/provider";
 import { signAuth, authHeaders } from "@/lib/walletAuth";
 import { tokenByMint, tokenSymbolFromMint } from "@/lib/tokens";
@@ -257,10 +258,13 @@ export function ClaimFlow() {
     );
   }
 
-  if (!claims || (umbra.status === "loading" || umbra.status === "idle")) {
+  if (!claims || umbra.status === "loading" || umbra.status === "idle") {
     return (
-      <div className="mx-auto max-w-prose px-6 py-10 text-sm text-text-subtle">
-        Loading…
+      <div className="mx-auto max-w-prose space-y-3 px-6 py-10">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-32" />
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
       </div>
     );
   }
