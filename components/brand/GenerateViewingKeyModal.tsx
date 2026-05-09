@@ -5,7 +5,7 @@ import { Check, Copy, Mail, X } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useUmbraClient } from "@/lib/umbra/client";
+import { useUmbraClient } from "@/lib/umbra/provider";
 import {
   generateMasterKey,
   generateMintKey,

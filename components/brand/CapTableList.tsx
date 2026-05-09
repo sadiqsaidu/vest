@@ -6,6 +6,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, type ShieldStatus } from "@/components/brand/StatusBadge";
 import { RegisterBanner } from "@/components/brand/RegisterBanner";
+import { Skeleton } from "@/components/primitives/Skeleton";
 import { signAuth, authHeaders } from "@/lib/walletAuth";
 import { tokenSymbolFromMint } from "@/lib/tokens";
 import { formatAmount, formatRelative } from "@/lib/utils";
@@ -43,13 +44,18 @@ export function CapTableList() {
     return () => {
       cancelled = true;
     };
-  }, [wallet.connected, wallet.publicKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.connected, wallet.publicKey?.toBase58()]);
 
   if (rows === null && !error) {
     return (
       <div className="mx-auto max-w-container px-6 py-12">
         <RegisterBanner />
-        <div className="mt-12 text-center text-sm text-text-subtle">Loading…</div>
+        <div className="mt-8 space-y-3">
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+        </div>
       </div>
     );
   }
