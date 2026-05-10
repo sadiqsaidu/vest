@@ -7,6 +7,8 @@ import { PublicKey } from "@solana/web3.js";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Stepper } from "@/components/brand/Stepper";
+import { SegmentedControl } from "@/components/primitives/SegmentedControl";
+import { NumberInput } from "@/components/primitives/NumberInput";
 import { TOKENS, type TokenSymbol } from "@/lib/tokens";
 import { cn, formatAmount, truncateAddress } from "@/lib/utils";
 import {
@@ -288,38 +290,26 @@ function BasicsStep(props: {
 
       <div className="space-y-2">
         <label className="text-sm text-text-muted">Token</label>
-        <div className="inline-flex rounded-md border border-border bg-surface-sunken p-1">
-          {(["USDC", "SOL"] as TokenSymbol[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setToken(t)}
-              className={cn(
-                "h-8 rounded px-4 text-sm transition-colors",
-                token === t
-                  ? "bg-surface text-text shadow-sm"
-                  : "text-text-muted hover:text-text",
-              )}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          ariaLabel="Token"
+          options={[
+            { value: "USDC", label: "USDC", hint: "6 dec" },
+            { value: "SOL", label: "SOL", hint: "9 dec" },
+          ]}
+          value={token}
+          onChange={setToken}
+        />
       </div>
 
       <div className="space-y-2">
         <label className="text-sm text-text-muted">Total budget</label>
-        <div className="relative max-w-xs">
-          <Input
-            type="number"
-            value={budget}
-            onChange={(e) => setBudget(e.target.value)}
-            placeholder="0"
-          />
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-text-subtle">
-            {token}
-          </span>
-        </div>
+        <NumberInput
+          value={budget}
+          onChange={setBudget}
+          suffix={token}
+          ariaLabel="Total budget"
+          className="max-w-xs"
+        />
         <p className="text-xs text-text-muted">
           Used for sanity check. Actual total computed from beneficiary allocations.
         </p>
@@ -452,47 +442,45 @@ function BeneficiariesStep(props: {
                   )}
                 </td>
                 <td className="py-2 pr-3">
-                  <div className="relative">
-                    <Input
-                      type="number"
-                      value={r.allocation}
-                      onChange={(e) =>
-                        updateRow(r.id, { allocation: e.target.value })
-                      }
-                    />
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text-subtle">
-                      {tokenSymbol}
-                    </span>
-                  </div>
-                </td>
-                <td className="py-2 pr-3 w-24">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={48}
-                    value={r.cliff}
-                    onChange={(e) => updateRow(r.id, { cliff: e.target.value })}
+                  <NumberInput
+                    value={r.allocation}
+                    onChange={(v) => updateRow(r.id, { allocation: v })}
+                    suffix={tokenSymbol}
+                    ariaLabel="Allocation"
                   />
                 </td>
                 <td className="py-2 pr-3 w-28">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={r.vest}
-                    onChange={(e) => updateRow(r.id, { vest: e.target.value })}
+                  <NumberInput
+                    value={r.cliff}
+                    onChange={(v) => updateRow(r.id, { cliff: v })}
+                    min={0}
+                    max={48}
+                    suffix="mo"
+                    ariaLabel="Cliff months"
                   />
                 </td>
                 <td className="py-2 pr-3 w-32">
-                  <select
+                  <NumberInput
+                    value={r.vest}
+                    onChange={(v) => updateRow(r.id, { vest: v })}
+                    min={1}
+                    suffix="mo"
+                    ariaLabel="Vest months"
+                  />
+                </td>
+                <td className="py-2 pr-3 w-36">
+                  <SegmentedControl
+                    size="sm"
+                    ariaLabel="Interval"
+                    options={[
+                      { value: "Monthly", label: "Monthly" },
+                      { value: "Quarterly", label: "Quarterly" },
+                    ]}
                     value={r.interval}
-                    onChange={(e) =>
-                      updateRow(r.id, { interval: e.target.value as Interval })
+                    onChange={(v) =>
+                      updateRow(r.id, { interval: v as Interval })
                     }
-                    className="h-10 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm"
-                  >
-                    <option>Monthly</option>
-                    <option>Quarterly</option>
-                  </select>
+                  />
                 </td>
                 <td className="py-2 text-right">
                   <button

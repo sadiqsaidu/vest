@@ -109,3 +109,59 @@ input:focus-visible,
   0%   { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+
+/* Remove native number-input chrome — we use our own steppers / unit suffix.
+   Applies to all <input type="number"> as a safety net; new code uses the
+   custom NumberInput primitive. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button,
+.vest-number::-webkit-outer-spin-button,
+.vest-number::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"],
+.vest-number {
+  -moz-appearance: textfield;
+}
+
+/* Pulse for "claimable now" / live indicators. Two-stage: gentle ring
+   that breathes outward, paired with the static dot it's attached to. */
+@keyframes vest-pulse-ring {
+  0%   { transform: scale(0.85); opacity: 0.6; }
+  80%  { transform: scale(2.2);  opacity: 0; }
+  100% { transform: scale(2.2);  opacity: 0; }
+}
+.vest-pulse {
+  position: relative;
+}
+.vest-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: vest-pulse-ring 2.4s ease-out infinite;
+}
+
+/* Soft hero glow used on dashboard header card. Single low-contrast
+   gradient — no colored fills, stays inside the design system. */
+.vest-hero-glow {
+  background:
+    radial-gradient(ellipse 600px 200px at 0% 0%, rgba(0,0,0,0.04), transparent 60%),
+    radial-gradient(ellipse 400px 200px at 100% 100%, rgba(0,0,0,0.03), transparent 60%),
+    var(--surface);
+}
+.dark .vest-hero-glow {
+  background:
+    radial-gradient(ellipse 600px 200px at 0% 0%, rgba(255,255,255,0.04), transparent 60%),
+    radial-gradient(ellipse 400px 200px at 100% 100%, rgba(255,255,255,0.03), transparent 60%),
+    var(--surface);
+}
+
+/* Subtle hatched / dotted backgrounds for visual interest in section
+   dividers — derived from the redaction motif in the brand. */
+.vest-dot-grid {
+  background-image: radial-gradient(circle at 1px 1px, var(--border-strong) 1px, transparent 1px);
+  background-size: 16px 16px;
+}

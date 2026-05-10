@@ -10,18 +10,14 @@ export function Footer() {
           <span className="font-mono text-xs text-text-subtle">
             © {new Date().getFullYear()}
           </span>
-          <div className="flex items-center gap-4 text-sm text-text-muted">
-            <Link href="#" className="hover:text-text">GitHub</Link>
-            <Link href="#" className="hover:text-text">Docs</Link>
-            <Link
-              href="https://umbraprivacy.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-text"
-            >
-              Umbra
-            </Link>
-          </div>
+          <Link
+            href="https://umbraprivacy.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-text-muted hover:text-text"
+          >
+            Umbra
+          </Link>
         </div>
         <Link
           href="https://umbraprivacy.com"

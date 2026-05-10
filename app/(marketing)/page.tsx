@@ -11,20 +11,47 @@ export default function LandingPage() {
         <section className="hero-vignette pt-40 pb-[120px] md:pt-[160px]">
           <div className="mx-auto max-w-container px-6">
             <div className="max-w-3xl">
+              <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-[11px] uppercase tracking-wider text-text-muted">
+                <span
+                  className="h-1.5 w-1.5 rounded-full animate-pulse"
+                  style={{ background: "var(--accent)" }}
+                />
+                Built on Umbra · Solana
+              </div>
               <h1 className="text-[44px] leading-[1.05] tracking-h1 text-text md:text-[64px]">
-                Cap tables were private for a reason.
+                Keep your team{" "}
+                <span
+                  className="relative inline-block"
+                  style={{ paddingBottom: "0.05em" }}
+                >
+                  off Solscan
+                  <span
+                    aria-hidden
+                    className="absolute left-0 right-0 origin-left"
+                    style={{
+                      bottom: "0.04em",
+                      height: "0.08em",
+                      background: "var(--text)",
+                      transform: "scaleX(1)",
+                    }}
+                  />
+                </span>
+                .
               </h1>
               <p className="mt-7 max-w-[540px] text-[20px] leading-[1.45] text-text-muted">
-                Vest is the first private vesting platform on Solana. Run team
-                and investor unlocks without putting salaries on a block
-                explorer.
+                Vest is private vesting on Solana. Run team and investor
+                unlocks without putting salaries on a block explorer — and
+                disclose to auditors on your own terms.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-3">
                 <Link
                   href="/dashboard"
-                  className="inline-flex h-11 items-center rounded-md bg-accent px-6 text-sm font-medium text-accent-fg hover:opacity-90"
+                  className="group inline-flex h-11 items-center gap-2 rounded-md bg-accent px-6 text-sm font-medium text-accent-fg transition-transform hover:opacity-90 active:translate-y-px"
                 >
                   Launch app
+                  <span className="transition-transform group-hover:translate-x-0.5">
+                    →
+                  </span>
                 </Link>
                 <Link
                   href="#how-it-works"

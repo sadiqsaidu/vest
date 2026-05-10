@@ -34,12 +34,6 @@ export function Nav() {
       <div className="mx-auto flex h-14 max-w-container items-center justify-between px-6">
         <Logo />
         <nav className="flex items-center gap-1">
-          <Link
-            href="#"
-            className="px-3 py-1.5 text-sm text-text-muted hover:text-text"
-          >
-            Docs
-          </Link>
           <ThemeToggle className="mx-1" />
           {connected ? (
             <WalletPill wallet={wallet} />
