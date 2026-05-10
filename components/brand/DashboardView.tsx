@@ -19,6 +19,7 @@ import {
   ScheduleTimeline,
   type TimelineUnlock,
 } from "@/components/primitives/ScheduleTimeline";
+import { Sparkline } from "@/components/primitives/Sparkline";
 import { tokenByMint, tokenSymbolFromMint } from "@/lib/tokens";
 import { signAuth, authHeaders } from "@/lib/walletAuth";
 import { cn, formatAmount, formatRelative, truncateAddress } from "@/lib/utils";
@@ -164,57 +165,129 @@ export function DashboardView({ id }: { id: string }) {
   const vestedPct =
     total === 0n ? 0 : Number((vested * 10000n) / total) / 100;
 
+  // Cumulative vested trajectory for the sparkline. One step per unlock.
+  // Plain compute (not a hook) — runs after early returns.
+  const sparkPoints = (() => {
+    if (schedule.length === 0) return [];
+    const sorted = [...schedule].sort(
+      (a, b) => a.unlock_timestamp - b.unlock_timestamp,
+    );
+    let cum = 0;
+    const totalNum = Number(total);
+    const points: { t: number; v: number }[] = [];
+    points.push({ t: sorted[0].unlock_timestamp, v: 0 });
+    for (const r of sorted) {
+      cum += Number(r.amount);
+      points.push({
+        t: r.unlock_timestamp,
+        v: totalNum === 0 ? 0 : (cum / totalNum) * 100,
+      });
+    }
+    return points;
+  })();
+
   return (
-    <div className="mx-auto max-w-container px-6 py-10 space-y-12">
-      {/* SECTION 1 — HEADER */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <h1 className="font-mono lowercase text-[36px] leading-[1.1] tracking-tight text-text">
-            {ct.project_name}
-          </h1>
-          <div className="flex items-center gap-3 text-sm text-text-muted">
-            <StatusPill status={displayStatus} />
-            <span>·</span>
-            <span className="font-mono">{symbol}</span>
-            <span className="font-mono text-text-subtle">
-              {truncateAddress(ct.mint, 6)}
-            </span>
-            {ct.test_mode && (
-              <>
-                <span>·</span>
-                <span className="text-warning">Test mode</span>
-              </>
+    <div className="mx-auto max-w-container px-6 py-10 space-y-14">
+      {/* HERO — header + primary metric in one card */}
+      <section
+        className="relative overflow-hidden rounded-2xl border border-border vest-hero-glow"
+        style={{ boxShadow: "var(--shadow-sm)" }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.35] vest-dot-grid"
+          style={{ maskImage: "linear-gradient(to bottom right, black 0%, transparent 70%)", WebkitMaskImage: "linear-gradient(to bottom right, black 0%, transparent 70%)" }}
+        />
+        <div className="relative grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.4fr_1fr] lg:gap-14">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill status={displayStatus} />
+              <span className="font-mono text-xs uppercase tracking-wider text-text-subtle">
+                {symbol}
+              </span>
+              <span className="font-mono text-xs text-text-subtle">
+                {truncateAddress(ct.mint, 6)}
+              </span>
+              {ct.test_mode && (
+                <span className="inline-flex h-5 items-center rounded border border-warning/40 px-1.5 text-[10px] uppercase tracking-wider text-warning">
+                  Test mode
+                </span>
+              )}
+            </div>
+            <h1 className="font-mono lowercase text-[40px] leading-[1.05] tracking-tight text-text sm:text-[48px]">
+              {ct.project_name}
+            </h1>
+            <div className="space-y-1.5">
+              <div className="text-[11px] uppercase tracking-wider text-text-subtle">
+                Total committed
+              </div>
+              <div className="flex items-baseline gap-2">
+                <Money
+                  amount={total}
+                  mint={ct.mint}
+                  showSymbol={false}
+                  className="text-[44px] leading-none sm:text-[56px]"
+                />
+                <span className="font-mono text-sm text-text-muted">
+                  {symbol}
+                </span>
+              </div>
+              <div className="text-sm text-text-muted">
+                {schedule.length} unlock event
+                {schedule.length === 1 ? "" : "s"} ·{" "}
+                {beneficiaries.size} beneficiar
+                {beneficiaries.size === 1 ? "y" : "ies"}
+                {nextUnlock && (
+                  <>
+                    {" · next "}
+                    {formatRelative(
+                      new Date(nextUnlock.unlock_timestamp * 1000),
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              {ct.shield_status === "pending" && (
+                <Link href={`/dashboard/${ct.id}/shield`}>
+                  <Button>Shield treasury</Button>
+                </Link>
+              )}
+              <Button variant="ghost" onClick={() => setVkModalOpen(true)}>
+                <KeyRound size={14} />
+                Generate viewing key
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-3 self-end">
+            <div className="flex items-baseline justify-between gap-4">
+              <div className="text-[11px] uppercase tracking-wider text-text-subtle">
+                Vesting trajectory
+              </div>
+              <div className="text-xs text-text-muted">
+                <span className="font-mono tabular-nums text-text">
+                  {vestedPct.toFixed(1)}%
+                </span>{" "}
+                vested
+              </div>
+            </div>
+            {sparkPoints.length > 0 ? (
+              <div className="text-text">
+                <Sparkline points={sparkPoints} width={420} height={72} className="w-full max-w-full" />
+              </div>
+            ) : (
+              <div className="rounded border border-dashed border-border p-6 text-center text-xs text-text-subtle">
+                No unlocks scheduled yet.
+              </div>
             )}
+            <ProgressBar pct={vestedPct} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {ct.shield_status === "pending" && (
-            <Link href={`/dashboard/${ct.id}/shield`}>
-              <Button>Shield treasury</Button>
-            </Link>
-          )}
-          <Button variant="ghost" onClick={() => setVkModalOpen(true)}>
-            <KeyRound size={14} />
-            Generate viewing key
-          </Button>
-        </div>
-      </div>
+      </section>
 
-      {/* SECTION 2 — STATS */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard
-          label="Total committed"
-          value={
-            <Money
-              amount={total}
-              mint={ct.mint}
-              showSymbol={false}
-              className="text-[32px] leading-tight"
-            />
-          }
-          symbol={symbol}
-          secondary={`${schedule.length} unlock event${schedule.length === 1 ? "" : "s"} across ${beneficiaries.size} beneficiar${beneficiaries.size === 1 ? "y" : "ies"}`}
-        />
+      {/* MICRO-STATS — three glances under the hero */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
           label="Vested to date"
           value={
@@ -222,7 +295,7 @@ export function DashboardView({ id }: { id: string }) {
               amount={vested}
               mint={ct.mint}
               showSymbol={false}
-              className="text-[32px] leading-tight"
+              className="text-[28px] leading-tight"
             />
           }
           symbol={symbol}
@@ -235,11 +308,11 @@ export function DashboardView({ id }: { id: string }) {
               amount={claimed}
               mint={ct.mint}
               showSymbol={false}
-              className="text-[32px] leading-tight"
+              className="text-[28px] leading-tight"
             />
           }
           symbol={symbol}
-          secondary={`${claimedRows} of ${schedule.length} unlock${schedule.length === 1 ? "" : "s"} claimed`}
+          secondary={`${claimedRows} of ${schedule.length} unlock${schedule.length === 1 ? "" : "s"}`}
         />
         <StatCard
           label="Locked"
@@ -248,13 +321,13 @@ export function DashboardView({ id }: { id: string }) {
               amount={locked}
               mint={ct.mint}
               showSymbol={false}
-              className="text-[32px] leading-tight"
+              className="text-[28px] leading-tight"
             />
           }
           symbol={symbol}
           secondary={
             nextUnlock
-              ? `Next unlock ${formatRelative(new Date(nextUnlock.unlock_timestamp * 1000))}`
+              ? `Next ${formatRelative(new Date(nextUnlock.unlock_timestamp * 1000))}`
               : "All vested"
           }
         />
@@ -300,10 +373,19 @@ function StatCard({
   secondary: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-5 shadow-sm">
-      <span className="text-[11px] uppercase tracking-wider text-text-subtle">
-        {label}
-      </span>
+    <div
+      className="group relative flex flex-col gap-2 rounded-lg border border-border bg-surface p-5 transition-colors hover:border-border-strong"
+      style={{ boxShadow: "var(--shadow-sm)" }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] uppercase tracking-wider text-text-subtle">
+          {label}
+        </span>
+        <span
+          aria-hidden
+          className="h-1 w-6 rounded-full bg-border transition-colors group-hover:bg-text"
+        />
+      </div>
       <div className="flex items-baseline gap-1.5">
         {value}
         <span className="font-mono text-sm text-text-muted">{symbol}</span>
@@ -351,6 +433,22 @@ function deriveDisplayStatus(
   return "partially_claimed";
 }
 
+function ProgressBar({ pct }: { pct: number }) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return (
+    <div className="relative h-1 w-full overflow-hidden rounded-full bg-border">
+      <div
+        className="h-full rounded-full transition-[width] duration-700 ease-out"
+        style={{
+          width: `${clamped}%`,
+          background: "var(--text)",
+          opacity: 0.85,
+        }}
+      />
+    </div>
+  );
+}
+
 /* -----------------------------------------------------------------------
  * Beneficiaries
  * ---------------------------------------------------------------------*/
@@ -381,17 +479,29 @@ function Beneficiaries({
 
   if (grouped.length === 0) {
     return (
-      <section className="space-y-3">
+      <section className="space-y-4">
         <SectionHeading title="Beneficiaries" count={0} />
         <EmptyState>No beneficiaries yet.</EmptyState>
       </section>
     );
   }
 
+  const claimableSomewhere = grouped.some((g) =>
+    g.rows.some(
+      (r) =>
+        r.unlock_timestamp <= Math.floor(Date.now() / 1000) &&
+        r.status !== "claimed",
+    ),
+  );
+
   return (
-    <section className="space-y-3">
-      <SectionHeading title="Beneficiaries" count={grouped.length} />
-      <ul className="border-t border-border">
+    <section className="space-y-4">
+      <SectionHeading
+        title="Beneficiaries"
+        count={grouped.length}
+        hint={claimableSomewhere ? "claimable now" : undefined}
+      />
+      <ul>
         {grouped.map((g) => (
           <BeneficiaryRow
             key={g.wallet}
@@ -432,6 +542,9 @@ function BeneficiaryRow({
     .reduce((acc, r) => acc + BigInt(r.amount), 0n);
   const next = rows.find((r) => r.unlock_timestamp > now);
   const label = rows[0]?.beneficiary_label ?? "—";
+  const claimableCount = rows.filter(
+    (r) => r.unlock_timestamp <= now && r.status !== "claimed",
+  ).length;
 
   const timelineUnlocks: TimelineUnlock[] = rows.map((r) => ({
     id: r.id,
@@ -456,7 +569,17 @@ function BeneficiaryRow({
         )}
       >
         <div className="min-w-0">
-          <div className="text-sm text-text">{label}</div>
+          <div className="flex items-center gap-2 text-sm text-text">
+            {claimableCount > 0 && (
+              <span
+                className="vest-pulse inline-flex h-1.5 w-1.5 rounded-full text-success"
+                style={{ background: "var(--success)", color: "var(--success)" }}
+                title={`${claimableCount} unlock${claimableCount === 1 ? "" : "s"} claimable now`}
+                aria-label="Claimable now"
+              />
+            )}
+            <span className="truncate">{label}</span>
+          </div>
           <div className="text-xs text-text-subtle sm:hidden">
             <Address pubkey={wallet} chars={4} />
           </div>
@@ -552,8 +675,8 @@ function Activity({
 
   if (events === null) {
     return (
-      <section className="space-y-3">
-        <h2 className="text-sm tracking-h2 text-text-muted">Activity</h2>
+      <section className="space-y-4">
+        <SectionHeading title="Activity" count={0} />
         <Skeleton className="h-12" />
         <Skeleton className="h-12" />
         <Skeleton className="h-12" />
@@ -563,8 +686,8 @@ function Activity({
 
   if (events.length === 0) {
     return (
-      <section className="space-y-3">
-        <h2 className="text-sm tracking-h2 text-text-muted">Activity</h2>
+      <section className="space-y-4">
+        <SectionHeading title="Activity" count={0} />
         <EmptyState>Nothing has happened yet.</EmptyState>
       </section>
     );
@@ -574,9 +697,13 @@ function Activity({
   const more = events.length - shown;
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm tracking-h2 text-text-muted">Activity</h2>
-      <ul className="border-t border-border">
+    <section className="space-y-4">
+      <SectionHeading
+        title="Activity"
+        count={events.length}
+        hint={`Latest ${Math.min(events.length, shown)}`}
+      />
+      <ul>
         {visible.map((e, i) => (
           <ActivityRow
             key={`${e.kind}-${e.at}-${i}`}
@@ -730,14 +857,23 @@ function EmptyState({ children }: { children: React.ReactNode }) {
 function SectionHeading({
   title,
   count,
+  hint,
 }: {
   title: string;
   count: number;
+  hint?: string;
 }) {
   return (
-    <div className="flex items-baseline gap-2">
-      <h2 className="text-lg tracking-h2 text-text">{title}</h2>
-      <span className="text-sm text-text-subtle">{count}</span>
+    <div className="flex items-end justify-between gap-3 border-b border-border pb-3">
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-lg tracking-h2 text-text">{title}</h2>
+        <span className="font-mono text-xs text-text-subtle">
+          {String(count).padStart(2, "0")}
+        </span>
+      </div>
+      {hint && (
+        <span className="text-xs text-text-subtle">{hint}</span>
+      )}
     </div>
   );
 }

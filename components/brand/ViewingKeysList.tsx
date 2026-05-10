@@ -80,9 +80,14 @@ export function ViewingKeysList({
   };
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm tracking-h2 text-text-muted">Viewing keys</h2>
+    <section className="space-y-4">
+      <div className="flex items-end justify-between gap-3 border-b border-border pb-3">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-lg tracking-h2 text-text">Viewing keys</h2>
+          <span className="font-mono text-xs text-text-subtle">
+            {String(rows?.length ?? 0).padStart(2, "0")}
+          </span>
+        </div>
         <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
           <KeyRound size={12} />
           Generate
