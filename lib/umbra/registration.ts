@@ -29,7 +29,23 @@ export async function isRegistered(
 }
 
 export async function registerForMixer(client: unknown): Promise<void> {
-  const { getUserRegistrationFunction } = await import("@umbra-privacy/sdk");
-  const register = getUserRegistrationFunction({ client: client as any });
+  const [{ getUserRegistrationFunction }, zk] = await Promise.all([
+    import("@umbra-privacy/sdk"),
+    import("@umbra-privacy/web-zk-prover"),
+  ]);
+  // `anonymous: true` requires a Groth16 proof for the user-commitment step.
+  // Without `zkProver` in deps the SDK throws
+  // "ZK prover is required for anonymous mode registration".
+  const proverFn = (zk as any).getUserRegistrationProver;
+  if (typeof proverFn !== "function") {
+    throw new Error(
+      "@umbra-privacy/web-zk-prover is missing getUserRegistrationProver — check the installed version.",
+    );
+  }
+  const zkProver = proverFn();
+  const register = getUserRegistrationFunction(
+    { client: client as any },
+    { zkProver },
+  );
   await register({ confidential: true, anonymous: true });
 }

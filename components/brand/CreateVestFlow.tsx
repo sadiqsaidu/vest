@@ -15,6 +15,7 @@ import {
   type Interval,
 } from "@/lib/schedule";
 import { signAuth, authHeaders } from "@/lib/walletAuth";
+import { BeneficiaryRegistration } from "./BeneficiaryRegistration";
 
 type Row = {
   id: string;
@@ -440,6 +441,14 @@ function BeneficiariesStep(props: {
                   />
                   {r.walletValid === false && (
                     <div className="mt-1 text-xs text-danger">Invalid pubkey</div>
+                  )}
+                  {r.walletValid && (
+                    <div className="mt-1">
+                      <BeneficiaryRegistration
+                        pubkey={r.wallet.trim()}
+                        valid={r.walletValid}
+                      />
+                    </div>
                   )}
                 </td>
                 <td className="py-2 pr-3">
